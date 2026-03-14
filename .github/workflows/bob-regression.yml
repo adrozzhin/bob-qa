@@ -7,8 +7,8 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    # Run every weekday at 08:00 UTC
-    - cron: '0 8 * * 1-5'
+    # Intentionally set to Feb 31 (never occurs) — enable by changing to e.g. '0 8 * * 1-5'
+    - cron: '0 8 31 2 *'
 
 jobs:
   bob-tests:
