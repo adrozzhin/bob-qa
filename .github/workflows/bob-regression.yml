@@ -1,0 +1,105 @@
+name: Bob regression suite
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Run every weekday at 08:00 UTC
+    - cron: '0 8 * * 1-5'
+
+jobs:
+  bob-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers (Chromium only)
+        run: npx playwright install chromium
+
+      - name: Restore ChatGPT session
+        # Store the contents of fixtures/chatgpt-session.json as this secret.
+        # Generate it locally with:  npm run save-session
+        run: echo '${{ secrets.CHATGPT_SESSION_JSON }}' > fixtures/chatgpt-session.json
+
+      # ── Test jobs (continue-on-error so all three suites always run) ─────────
+
+      - name: Run functional tests (Behaviors A–E)
+        run: npx playwright test tests/functional/ --project=functional
+        continue-on-error: true
+        env:
+          BOB_URL: ${{ secrets.BOB_URL }}
+          CHATGPT_SESSION: ./fixtures/chatgpt-session.json
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+          JUDGE_MODEL: claude-haiku-4-5-20251001
+
+      - name: Run security tests (Risks 1–8 + 2b)
+        run: npx playwright test tests/security/ --project=security
+        continue-on-error: true
+        env:
+          BOB_URL: ${{ secrets.BOB_URL }}
+          CHATGPT_SESSION: ./fixtures/chatgpt-session.json
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+          JUDGE_MODEL: claude-haiku-4-5-20251001
+
+      - name: Run golden suite (G1–G10)
+        run: npx playwright test tests/golden/ --project=golden
+        continue-on-error: true
+        env:
+          BOB_URL: ${{ secrets.BOB_URL }}
+          CHATGPT_SESSION: ./fixtures/chatgpt-session.json
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+          JUDGE_MODEL: claude-haiku-4-5-20251001
+
+      # ── Score gate ────────────────────────────────────────────────────────────
+
+      - name: Score gate (blocks release on new P0 failures or P1 score < 80%)
+        run: npx ts-node scripts/score-gate.ts
+        env:
+          BASELINE_SCORE_PATH: ./baselines/latest.json
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      # ── Baseline comparison ───────────────────────────────────────────────────
+
+      - name: Baseline comparison (non-blocking regression detection)
+        run: npx ts-node scripts/baseline-compare.ts
+        env:
+          BASELINE_SCORE_PATH: ./baselines/latest.json
+
+      # ── PR comment ────────────────────────────────────────────────────────────
+
+      - name: Post PR summary comment
+        if: github.event_name == 'pull_request'
+        run: npx ts-node scripts/pr-comment.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REF: ${{ github.ref }}
+
+      # ── Artifact upload ───────────────────────────────────────────────────────
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bob-qa-${{ github.run_id }}
+          path: |
+            reports/
+            test-results/
+            baselines/
+          retention-days: 30

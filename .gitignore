@@ -1,0 +1,9 @@
+fixtures/chatgpt-session.json
+.env
+reports/
+node_modules/
+dist/
+test-results/
+playwright-report/
+baselines/
+*.json.bak

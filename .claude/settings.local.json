@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(grep -o \"\"message\"\":s*\"\"[^\"\"]*Error[^\"\"]*\"\" /c/Users/drozz/projects/bob-qa/reports/playwright-results.json)"
+    ]
+  }
+}

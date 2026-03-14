@@ -1,0 +1,25 @@
+{
+  "name": "bob-qa",
+  "version": "1.0.0",
+  "description": "Test automation framework for Bob — PDQ Custom GPT customer support chatbot",
+  "scripts": {
+    "test": "playwright test",
+    "test:functional": "playwright test tests/functional/ --project=functional",
+    "test:security": "playwright test tests/security/ --project=security",
+    "test:golden": "playwright test tests/golden/ --project=golden",
+    "save-session": "ts-node scripts/save-session.ts",
+    "convert-session": "ts-node scripts/convert-session.ts",
+    "score-gate": "ts-node scripts/score-gate.ts",
+    "baseline-compare": "ts-node scripts/baseline-compare.ts",
+    "pr-comment": "ts-node scripts/pr-comment.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@playwright/test": "latest",
+    "@types/node": "latest",
+    "dotenv": "latest",
+    "ts-node": "latest",
+    "typescript": "latest"
+  }
+}
