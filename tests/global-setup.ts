@@ -21,9 +21,22 @@ const SETUP_HINT =
   'Log in manually in the browser that opens, then press Enter to save the session.';
 
 async function isSessionValid(sessionPath: string): Promise<boolean> {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ storageState: sessionPath });
-  const page    = await context.newPage();
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    headless: true,
+    args: ['--disable-blink-features=AutomationControlled'],
+    ignoreDefaultArgs: ['--enable-automation'],
+  });
+  const context = await browser.newContext({
+    storageState: sessionPath,
+    viewport: { width: 1280, height: 800 },
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  });
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  });
+  const page = await context.newPage();
   try {
     await page.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 20_000 });
     await page.waitForTimeout(2000);
