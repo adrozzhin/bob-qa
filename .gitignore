@@ -7,3 +7,4 @@ test-results/
 playwright-report/
 baselines/
 *.json.bak
+.claude/
