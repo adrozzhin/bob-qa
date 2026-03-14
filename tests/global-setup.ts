@@ -27,6 +27,10 @@ async function isSessionValid(sessionPath: string): Promise<boolean> {
   try {
     await page.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 20_000 });
     await page.waitForTimeout(2000);
+    const title = await page.title();
+    if (title.includes('Just a moment') || page.url().includes('challenge')) {
+      return false;
+    }
     return !page.url().includes('/auth') && !page.url().includes('login');
   } catch {
     return false;

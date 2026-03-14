@@ -6,6 +6,17 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Test suite to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - functional
+          - security
+          - golden
   schedule:
     # Intentionally set to Feb 31 (never occurs) — enable by changing to e.g. '0 8 * * 1-5'
     - cron: '0 8 31 2 *'
@@ -39,6 +50,7 @@ jobs:
       # ── Test jobs (continue-on-error so all three suites always run) ─────────
 
       - name: Run functional tests (Behaviors A–E)
+        if: ${{ github.event.inputs.suite == 'functional' || github.event.inputs.suite == 'all' || github.event.inputs.suite == '' }}
         run: npx playwright test tests/functional/ --project=functional
         continue-on-error: true
         env:
@@ -48,6 +60,7 @@ jobs:
           JUDGE_MODEL: claude-haiku-4-5-20251001
 
       - name: Run security tests (Risks 1–8 + 2b)
+        if: ${{ github.event.inputs.suite == 'security' || github.event.inputs.suite == 'all' || github.event.inputs.suite == '' }}
         run: npx playwright test tests/security/ --project=security
         continue-on-error: true
         env:
@@ -57,6 +70,7 @@ jobs:
           JUDGE_MODEL: claude-haiku-4-5-20251001
 
       - name: Run golden suite (G1–G10)
+        if: ${{ github.event.inputs.suite == 'golden' || github.event.inputs.suite == 'all' || github.event.inputs.suite == '' }}
         run: npx playwright test tests/golden/ --project=golden
         continue-on-error: true
         env:
@@ -65,6 +79,16 @@ jobs:
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL: claude-haiku-4-5-20251001
 
+      # ── Baseline comparison ───────────────────────────────────────────────────
+      # Runs BEFORE score-gate so it compares against the previous baseline,
+      # not the one score-gate is about to write.
+
+      - name: Baseline comparison (non-blocking regression detection)
+        run: npx ts-node scripts/baseline-compare.ts
+        continue-on-error: true
+        env:
+          BASELINE_SCORE_PATH: ./baselines/latest.json
+
       # ── Score gate ────────────────────────────────────────────────────────────
 
       - name: Score gate (blocks release on new P0 failures or P1 score < 80%)
@@ -72,13 +96,6 @@ jobs:
         env:
           BASELINE_SCORE_PATH: ./baselines/latest.json
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      # ── Baseline comparison ───────────────────────────────────────────────────
-
-      - name: Baseline comparison (non-blocking regression detection)
-        run: npx ts-node scripts/baseline-compare.ts
-        env:
-          BASELINE_SCORE_PATH: ./baselines/latest.json
 
       # ── PR comment ────────────────────────────────────────────────────────────
 

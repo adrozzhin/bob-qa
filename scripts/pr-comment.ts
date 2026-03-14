@@ -30,6 +30,7 @@ interface GoldenResult {
   safetyScore: number;
   failedCriteria: string[];
   runScores: number[];
+  inconsistentSafetyBehavior: boolean;
 }
 
 interface GoldenReport {
@@ -43,16 +44,60 @@ interface GoldenReport {
   results: GoldenResult[];
 }
 
+interface SecurityRiskResult {
+  id: string;
+  priority: string;
+  verdict: string;
+  safetyScore: number;
+  failedCriteria: string[];
+  inconsistentSafetyBehavior: boolean;
+}
+
+interface SecurityReport {
+  timestamp: string;
+  overallStatus: 'PASS' | 'FAIL';
+  failures: string[];
+  warnings: string[];
+  riskResults: SecurityRiskResult[];
+}
+
+interface FunctionalResult {
+  id: string;
+  verdict: string;
+  avgScore: number;
+  safetyScore: number;
+  failedCriteria: string[];
+  inconsistentSafetyBehavior: boolean;
+}
+
+interface FunctionalReport {
+  timestamp: string;
+  overallStatus: 'PASS' | 'FAIL';
+  totalTests: number;
+  passed: number;
+  failed: number;
+  failures: string[];
+  avgScore: number;
+  results: FunctionalResult[];
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const REPORT_PATH = path.resolve('./reports/golden-latest.json');
+const GOLDEN_REPORT_PATH     = path.resolve('./reports/golden-latest.json');
+const SECURITY_REPORT_PATH   = path.resolve('./reports/security-latest.json');
+const FUNCTIONAL_REPORT_PATH = path.resolve('./reports/functional-latest.json');
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN ?? '';
+const GITHUB_TOKEN      = process.env.GITHUB_TOKEN ?? '';
 const GITHUB_REPOSITORY = process.env.GITHUB_REPOSITORY ?? '';
-const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID ?? '';
-const GITHUB_REF = process.env.GITHUB_REF ?? '';
+const GITHUB_RUN_ID     = process.env.GITHUB_RUN_ID ?? '';
+const GITHUB_REF        = process.env.GITHUB_REF ?? '';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function readOptionalReport<T>(filePath: string): T | null {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
+}
 
 function extractPRNumber(ref: string): number | null {
   // refs/pull/123/merge
@@ -60,68 +105,127 @@ function extractPRNumber(ref: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-function statusBadge(report: GoldenReport): string {
-  if (report.failures.length > 0) return '🔴 FAIL';
-  return '🟢 PASS';
+function statusBadge(
+  golden: GoldenReport | null,
+  security: SecurityReport | null,
+  functional: FunctionalReport | null,
+): string {
+  const anyFail =
+    (golden && golden.failures.length > 0) ||
+    (security && security.failures.length > 0) ||
+    (functional && functional.failures.length > 0);
+  return anyFail ? '🔴 FAIL' : '🟢 PASS';
 }
 
-function verdictEmoji(result: GoldenResult): string {
-  if (result.verdict === 'PASS') return '✅';
-  return '❌';
+function verdictEmoji(verdict: string): string {
+  return verdict === 'PASS' ? '✅' : '❌';
 }
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
-function buildComment(report: GoldenReport): string {
-  const badge = statusBadge(report);
+function buildComment(
+  golden: GoldenReport | null,
+  security: SecurityReport | null,
+  functional: FunctionalReport | null,
+): string {
+  const badge = statusBadge(golden, security, functional);
   const artifactUrl = GITHUB_RUN_ID && GITHUB_REPOSITORY
     ? `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
     : '_(artifact link unavailable)_';
 
-  const rows = report.results
-    .map((r) => {
-      const emoji = verdictEmoji(r);
-      const score = `${(r.avgScore * 100).toFixed(0)}%`;
-      const failed = r.failedCriteria.length > 0
-        ? `\`${r.failedCriteria.join(', ')}\``
-        : '—';
-      const borderline = r.verdict === 'PASS' && r.avgScore >= 0.6 && r.avgScore < 0.8
-        ? ' ⚠️'
-        : '';
-      return `| ${emoji} | \`${r.id}\` | ${r.priority} | ${truncate(r.prompt, 60)} | ${score}${borderline} | ${r.verdict} | ${failed} |`;
-    })
-    .join('\n');
+  // Aggregate failures from all suites
+  const allFailures: string[] = [
+    ...(golden?.failures ?? []),
+    ...(security?.failures ?? []),
+    ...(functional?.failures ?? []),
+  ];
 
   const failureSection =
-    report.failures.length > 0
+    allFailures.length > 0
       ? `\n### ❌ Failures — BLOCK MERGE\nThese must be fixed before merging:\n` +
-        report.failures.map((id: string) => `- \`${id}\``).join('\n')
+        allFailures.map((id) => `- \`${id}\``).join('\n')
       : '';
 
-  return [
+  const sections: string[] = [
     `## Bob QA — Regression Report  ${badge}`,
     '',
-    `**Run date:** ${report.timestamp}  `,
-    `**Tests:** ${report.passed}/${report.totalTests} passed  `,
-    `**Avg score:** ${(report.avgScore * 100).toFixed(1)}%  `,
+    `**Run date:** ${golden?.timestamp ?? security?.timestamp ?? functional?.timestamp ?? 'unknown'}  `,
     `**Artifact:** [View full report & videos](${artifactUrl})`,
     '',
-    '### Golden Set Results',
-    '',
-    '| | ID | Priority | Prompt | Score | Verdict | Failed Criteria |',
-    '|---|---|---|---|---|---|---|',
-    rows,
-    '',
-    '> ⚠️ = borderline score (60–79%), requires human review before release',
+  ];
+
+  // ── Golden section ──────────────────────────────────────────────────────────
+  if (golden) {
+    const goldenRows = golden.results
+      .map((r) => {
+        const score = `${(r.avgScore * 100).toFixed(0)}%`;
+        const failed = r.failedCriteria.length > 0 ? `\`${r.failedCriteria.join(', ')}\`` : '—';
+        const borderline = r.verdict === 'PASS' && r.avgScore >= 0.6 && r.avgScore < 0.8 ? ' ⚠️' : '';
+        return `| ${verdictEmoji(r.verdict)} | \`${r.id}\` | ${r.priority} | ${truncate(r.prompt, 60)} | ${score}${borderline} | ${r.verdict} | ${failed} |`;
+      })
+      .join('\n');
+
+    sections.push(
+      `### Golden Set  ${verdictEmoji(golden.overallStatus)} ${golden.passed}/${golden.totalTests} passed, avg ${(golden.avgScore * 100).toFixed(1)}%`,
+      '',
+      '| | ID | Priority | Prompt | Score | Verdict | Failed Criteria |',
+      '|---|---|---|---|---|---|---|',
+      goldenRows,
+      '',
+      '> ⚠️ = borderline score (60–79%), requires human review before release',
+      '',
+    );
+  }
+
+  // ── Security section ────────────────────────────────────────────────────────
+  if (security) {
+    const secRows = security.riskResults
+      .map((r) => {
+        const failed = r.failedCriteria.length > 0 ? `\`${r.failedCriteria.join(', ')}\`` : '—';
+        return `| ${verdictEmoji(r.verdict)} | \`${r.id}\` | ${r.priority} | ${r.verdict} | ${failed} |`;
+      })
+      .join('\n');
+
+    sections.push(
+      `### Security Risks  ${verdictEmoji(security.overallStatus)} ${security.riskResults.filter((r) => r.verdict === 'PASS').length}/${security.riskResults.length} passed`,
+      '',
+      '| | ID | Priority | Verdict | Failed Criteria |',
+      '|---|---|---|---|---|',
+      secRows,
+      '',
+    );
+  }
+
+  // ── Functional section ──────────────────────────────────────────────────────
+  if (functional) {
+    const funcRows = functional.results
+      .map((r) => {
+        const score = `${(r.avgScore * 100).toFixed(0)}%`;
+        const failed = r.failedCriteria.length > 0 ? `\`${r.failedCriteria.join(', ')}\`` : '—';
+        return `| ${verdictEmoji(r.verdict)} | \`${r.id}\` | ${score} | ${r.verdict} | ${failed} |`;
+      })
+      .join('\n');
+
+    sections.push(
+      `### Functional Behaviors  ${verdictEmoji(functional.overallStatus)} ${functional.passed}/${functional.totalTests} passed, avg ${(functional.avgScore * 100).toFixed(1)}%`,
+      '',
+      '| | ID | Score | Verdict | Failed Criteria |',
+      '|---|---|---|---|---|',
+      funcRows,
+      '',
+    );
+  }
+
+  sections.push(
     failureSection,
     '',
     '---',
-    '_Generated by [bob-qa](https://github.com/' + GITHUB_REPOSITORY + ')_',
-  ]
-    .filter((l) => l !== undefined)
-    .join('\n');
+    `_Generated by [bob-qa](https://github.com/${GITHUB_REPOSITORY})_`,
+  );
+
+  return sections.filter((l) => l !== undefined).join('\n');
 }
 
 function postComment(prNumber: number, body: string): Promise<void> {
@@ -164,13 +268,16 @@ function postComment(prNumber: number, body: string): Promise<void> {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  if (!fs.existsSync(REPORT_PATH)) {
-    console.warn('No golden report found — skipping PR comment.');
+  const golden     = readOptionalReport<GoldenReport>(GOLDEN_REPORT_PATH);
+  const security   = readOptionalReport<SecurityReport>(SECURITY_REPORT_PATH);
+  const functional = readOptionalReport<FunctionalReport>(FUNCTIONAL_REPORT_PATH);
+
+  if (!golden && !security && !functional) {
+    console.warn('No test reports found — skipping PR comment.');
     process.exit(0);
   }
 
-  const report = JSON.parse(fs.readFileSync(REPORT_PATH, 'utf-8')) as GoldenReport;
-  const comment = buildComment(report);
+  const comment = buildComment(golden, security, functional);
 
   console.log('\n── PR Comment Preview ───────────────────────────────────');
   console.log(comment.slice(0, 800) + (comment.length > 800 ? '\n…' : ''));

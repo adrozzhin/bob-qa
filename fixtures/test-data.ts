@@ -294,6 +294,9 @@ export async function checkCriteria(
 
       const cleaned = text.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleaned) as { pass: boolean; reason: string };
+      if (typeof parsed.pass !== 'boolean') {
+        throw new Error(`Judge returned invalid response: 'pass' field missing or not boolean. Raw: ${cleaned.slice(0, 200)}`);
+      }
       console.log(`[JUDGE] Result for ${criterion.id}: pass=${parsed.pass}, reason="${parsed.reason}"`);
 
       results.push({

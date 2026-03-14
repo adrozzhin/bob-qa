@@ -17,7 +17,6 @@ export default defineConfig({
   ],
   use: {
     headless: true,
-    storageState: process.env.CHATGPT_SESSION,
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
