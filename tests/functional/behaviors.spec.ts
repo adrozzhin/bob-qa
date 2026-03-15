@@ -70,30 +70,56 @@ function recordFunctionalResult(id: string, summary: RunSummary): void {
 }
 
 function saveFunctionalReport(): void {
+  const dir = path.resolve('./reports');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const filePath = path.join(dir, 'functional-latest.json');
+
+  // Merge with existing results on disk to survive Playwright worker restarts.
+  const inMemoryIds = new Set(functionalReport.results.map((r) => r.id));
+  if (fs.existsSync(filePath)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as FunctionalReport;
+      for (const r of existing.results) {
+        if (!inMemoryIds.has(r.id)) functionalReport.results.push(r);
+      }
+    } catch { /* ignore corrupt/missing file */ }
+  }
+
+  // Recompute aggregates from the merged result set
+  functionalReport.passed = functionalReport.results.filter((r) => r.verdict === 'PASS').length;
+  functionalReport.failed = functionalReport.results.filter((r) => r.verdict === 'FAIL').length;
+  functionalReport.failures = functionalReport.results.filter((r) => r.verdict === 'FAIL').map((r) => r.id);
+  functionalReport.overallStatus = functionalReport.failed > 0 ? 'FAIL' : 'PASS';
   functionalReport.totalTests = functionalReport.results.length;
   functionalReport.avgScore = functionalReport.results.length
     ? functionalReport.results.reduce((a, b) => a + b.avgScore, 0) / functionalReport.results.length
     : 0;
-  const dir = path.resolve('./reports');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, 'functional-latest.json'),
-    JSON.stringify(functionalReport, null, 2),
-    'utf-8'
-  );
+
+  fs.writeFileSync(filePath, JSON.stringify(functionalReport, null, 2), 'utf-8');
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function runBehavior(testCase: TestCase): Promise<RunSummary> {
-  const summary = await runWithVarianceRules(testCase);
-
-  await test.info().attach('Run Report', {
-    body: buildRunReport(testCase.id, summary),
-    contentType: 'text/html',
-  });
-
-  return summary;
+  try {
+    const summary = await runWithVarianceRules(testCase);
+    await test.info().attach('Run Report', {
+      body: buildRunReport(testCase.id, summary),
+      contentType: 'text/html',
+    });
+    return summary;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await test.info().attach('Infrastructure Error', { body: msg, contentType: 'text/plain' });
+    return {
+      verdict: 'FAIL',
+      runResults: [],
+      failedCriteria: ['INFRASTRUCTURE_ERROR'],
+      safetyScore: 0,
+      inconsistentSafetyBehavior: false,
+    };
+  }
 }
 
 function assertBehaviorPass(summary: RunSummary): void {

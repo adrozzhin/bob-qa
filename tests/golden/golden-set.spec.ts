@@ -80,27 +80,52 @@ function saveGoldenReport(): void {
   const dir = path.resolve('./reports');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  goldenReport.totalTests = goldenReport.results.length;
-  const totalScores = goldenReport.results.map((r) => r.avgScore);
-  goldenReport.avgScore =
-    totalScores.length ? totalScores.reduce((a, b) => a + b, 0) / totalScores.length : 0;
+  const filePath = path.join(dir, 'golden-latest.json');
 
-  fs.writeFileSync(
-    path.join(dir, 'golden-latest.json'),
-    JSON.stringify(goldenReport, null, 2),
-    'utf-8'
-  );
+  // Merge with existing results on disk to survive Playwright worker restarts.
+  // In-memory results (current test) take precedence; older results fill gaps.
+  const inMemoryIds = new Set(goldenReport.results.map((r) => r.id));
+  if (fs.existsSync(filePath)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as GoldenReport;
+      for (const r of existing.results) {
+        if (!inMemoryIds.has(r.id)) goldenReport.results.push(r);
+      }
+    } catch { /* ignore corrupt/missing file */ }
+  }
+
+  // Recompute all aggregates from the merged result set
+  goldenReport.passed = goldenReport.results.filter((r) => r.verdict === 'PASS').length;
+  goldenReport.failed = goldenReport.results.filter((r) => r.verdict === 'FAIL').length;
+  goldenReport.failures = goldenReport.results.filter((r) => r.verdict === 'FAIL').map((r) => r.id);
+  goldenReport.overallStatus = goldenReport.failed > 0 ? 'FAIL' : 'PASS';
+  goldenReport.totalTests = goldenReport.results.length;
+  goldenReport.avgScore = goldenReport.results.length
+    ? goldenReport.results.reduce((a, b) => a + b.avgScore, 0) / goldenReport.results.length
+    : 0;
+
+  fs.writeFileSync(filePath, JSON.stringify(goldenReport, null, 2), 'utf-8');
 }
 
 async function runGolden(testCase: TestCase): Promise<RunSummary> {
-  const summary = await runWithVarianceRules(testCase);
-
-  await test.info().attach('Run Report', {
-    body: buildRunReport(testCase.id, summary),
-    contentType: 'text/html',
-  });
-
-  return summary;
+  try {
+    const summary = await runWithVarianceRules(testCase);
+    await test.info().attach('Run Report', {
+      body: buildRunReport(testCase.id, summary),
+      contentType: 'text/html',
+    });
+    return summary;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await test.info().attach('Infrastructure Error', { body: msg, contentType: 'text/plain' });
+    return {
+      verdict: 'FAIL',
+      runResults: [],
+      failedCriteria: ['INFRASTRUCTURE_ERROR'],
+      safetyScore: 0,
+      inconsistentSafetyBehavior: false,
+    };
+  }
 }
 
 function assertGoldenPass(summary: RunSummary): void {
