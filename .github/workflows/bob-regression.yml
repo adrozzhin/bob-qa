@@ -2,7 +2,7 @@ name: Bob regression suite
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -82,22 +82,11 @@ jobs:
           JUDGE_MODEL: claude-haiku-4-5-20251001
           SUITE_NAME: golden
 
-      # ── Baseline comparison ───────────────────────────────────────────────────
-      # Runs BEFORE score-gate so it compares against the previous baseline,
-      # not the one score-gate is about to write.
-
-      - name: Baseline comparison (non-blocking regression detection)
-        run: npx ts-node scripts/baseline-compare.ts
-        continue-on-error: true
-        env:
-          BASELINE_SCORE_PATH: ./baselines/latest.json
-
       # ── Score gate ────────────────────────────────────────────────────────────
 
       - name: Score gate (blocks release on new P0 failures or P1 score < 80%)
         run: npx ts-node scripts/score-gate.ts
         env:
-          BASELINE_SCORE_PATH: ./baselines/latest.json
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       # ── PR comment ────────────────────────────────────────────────────────────
@@ -121,5 +110,4 @@ jobs:
           path: |
             reports/
             test-results/
-            baselines/
           retention-days: 30

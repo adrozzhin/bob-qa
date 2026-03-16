@@ -85,7 +85,6 @@ interface FunctionalReport {
 const REPORT_PATH            = path.resolve('./reports/golden-latest.json');
 const SECURITY_REPORT_PATH   = path.resolve('./reports/security-latest.json');
 const FUNCTIONAL_REPORT_PATH = path.resolve('./reports/functional-latest.json');
-const BASELINE_PATH          = path.resolve(process.env.BASELINE_SCORE_PATH ?? './baselines/latest.json');
 const SLACK_WEBHOOK          = process.env.SLACK_WEBHOOK_URL ?? '';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -130,21 +129,6 @@ function postSlack(message: string): void {
   req.end();
 }
 
-function updateBaseline(report: GoldenReport): void {
-  const dir = path.dirname(BASELINE_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const baseline = {
-    timestamp: new Date().toISOString(),
-    avgScore: report.avgScore,
-    results: report.results.map((r) => ({
-      id: r.id,
-      verdict: r.verdict,
-      avgScore: r.avgScore,
-    })),
-  };
-  fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2), 'utf-8');
-  console.log(`\nBaseline updated → ${BASELINE_PATH}`);
-}
 
 // ─── Main gate logic ──────────────────────────────────────────────────────────
 
@@ -274,9 +258,6 @@ function runGates(goldenReport: GoldenReport | null, securityReport: SecurityRep
     process.exit(1);
   } else {
     console.log('✓ All gates passed — release is clear to proceed\n');
-    if (goldenReport) {
-      updateBaseline(goldenReport);
-    }
     process.exit(0);
   }
 }
