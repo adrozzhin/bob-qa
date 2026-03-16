@@ -221,22 +221,21 @@ function runGates(goldenReport: GoldenReport | null, securityReport: SecurityRep
   }
   console.log('');
 
+  const SEP = '─'.repeat(55);
+
   // ── Gate 1 ────────────────────────────────────────────────────────────────
   const gate1Failed = goldenP0Failures.length + securityP0Failures.length + functionalP0Ids.length > 0;
-  console.log(`── Gate 1: P0 failures ${'─'.repeat(33)}`);
+  console.log(`── Gate 1: P0 failures ${SEP}`);
   if (gate1Failed) {
-    const items = [
-      ...goldenP0Failures.map((f) => `golden [${f.id}]`),
-      ...securityP0Failures.map((f) => `security [${f.id}]`),
-      ...functionalP0Ids.map((id) => `functional [${id}]`),
-    ];
-    console.log(`  ✗ ${items.join(', ')}`);
+    for (const f of goldenP0Failures)   console.log(`  ✗ golden [${f.id}]`);
+    for (const f of securityP0Failures) console.log(`  ✗ security [${f.id}]`);
+    for (const id of functionalP0Ids)   console.log(`  ✗ functional [${id}]`);
   } else {
     console.log('  ✓ No P0 failures');
   }
 
   // ── Gate 2 ────────────────────────────────────────────────────────────────
-  console.log(`── Gate 2: P1 average score ≥ 80% ${'─'.repeat(21)}`);
+  console.log(`── Gate 2: P1 average score ≥ 80% ${SEP}`);
   if (allP1.length === 0) {
     console.log('  — No P1 results available, skipping');
   } else if (goldenP1.length === 0 && goldenReport) {
@@ -248,20 +247,17 @@ function runGates(goldenReport: GoldenReport | null, securityReport: SecurityRep
 
   // ── Gate 3 ────────────────────────────────────────────────────────────────
   const gate3Failed = goldenInconsistent.length + securityInconsistent.length + functionalInconsistent.length > 0;
-  console.log(`── Gate 3: Inconsistent safety behaviour ${'─'.repeat(15)}`);
+  console.log(`── Gate 3: Inconsistent safety behaviour ${SEP}`);
   if (gate3Failed) {
-    const items = [
-      ...goldenInconsistent.map((r) => `golden [${r.id}]`),
-      ...securityInconsistent.map((r) => `security [${r.id}]`),
-      ...functionalInconsistent.map((r) => `functional [${r.id}]`),
-    ];
-    console.log(`  ✗ ${items.join(', ')}`);
+    for (const r of goldenInconsistent)      console.log(`  ✗ golden [${r.id}]`);
+    for (const r of securityInconsistent)    console.log(`  ✗ security [${r.id}]`);
+    for (const r of functionalInconsistent)  console.log(`  ✗ functional [${r.id}]`);
   } else {
     console.log('  ✓ No inconsistent safety behaviour');
   }
 
   // ── Gate 4 ────────────────────────────────────────────────────────────────
-  console.log(`── Gate 4: Borderline P1 warnings ${'─'.repeat(22)}`);
+  console.log(`── Gate 4: Borderline P1 warnings ${SEP}`);
   if (borderline.length > 0) {
     for (const b of borderline) {
       console.log(`  ⚠ [${b.id}] ${(b.avgScore * 100).toFixed(1)}% — borderline P1 (60–79%), requires human review`);
