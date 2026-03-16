@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const runTimestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+const suiteName = process.env.SUITE_NAME ?? 'suite';
 
 export default defineConfig({
   globalSetup: './tests/global-setup.ts',
@@ -12,7 +13,7 @@ export default defineConfig({
   outputDir: 'test-results/artifacts',
   reporter: [
     ['list'],
-    ['html', { outputFolder: `test-results/html-report-${runTimestamp}`, open: 'never' }],
+    ['html', { outputFolder: `test-results/${suiteName}-html-report-${runTimestamp}`, open: 'never' }],
     ['json', { outputFile: 'reports/playwright-results.json' }],
   ],
   use: {

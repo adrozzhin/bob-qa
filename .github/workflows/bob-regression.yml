@@ -58,6 +58,7 @@ jobs:
           CHATGPT_SESSION: ./fixtures/chatgpt-session.json
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL: claude-haiku-4-5-20251001
+          SUITE_NAME: functional
 
       - name: Run security tests (Risks 1–8 + 2b)
         if: ${{ github.event.inputs.suite == 'security' || github.event.inputs.suite == 'all' || github.event.inputs.suite == '' }}
@@ -68,6 +69,7 @@ jobs:
           CHATGPT_SESSION: ./fixtures/chatgpt-session.json
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL: claude-haiku-4-5-20251001
+          SUITE_NAME: security
 
       - name: Run golden suite (G1–G10)
         if: ${{ github.event.inputs.suite == 'golden' || github.event.inputs.suite == 'all' || github.event.inputs.suite == '' }}
@@ -78,6 +80,7 @@ jobs:
           CHATGPT_SESSION: ./fixtures/chatgpt-session.json
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL: claude-haiku-4-5-20251001
+          SUITE_NAME: golden
 
       # ── Baseline comparison ───────────────────────────────────────────────────
       # Runs BEFORE score-gate so it compares against the previous baseline,

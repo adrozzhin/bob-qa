@@ -270,11 +270,7 @@ function runGates(goldenReport: GoldenReport | null, securityReport: SecurityRep
   // ── Verdict ───────────────────────────────────────────────────────────────
   console.log('');
   if (blocked) {
-    console.log('✗ RELEASE BLOCKED\n');
-    for (const reason of blockReasons) {
-      console.log(`  • ${reason}`);
-    }
-    console.log('');
+    console.log(`✗ RELEASE BLOCKED — fix the ${blockReasons.length} issue${blockReasons.length === 1 ? '' : 's'} listed above\n`);
     process.exit(1);
   } else {
     console.log('✓ All gates passed — release is clear to proceed\n');
