@@ -1,6 +1,6 @@
 # bob-qa
 
-Automated test framework for **Bob** — the PDQ Custom GPT customer support chatbot.
+Automated test framework for **Bob** — the Custom GPT customer support chatbot.
 
 ---
 
