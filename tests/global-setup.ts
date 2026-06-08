@@ -57,6 +57,14 @@ async function globalSetup(): Promise<void> {
     throw new Error(`No ChatGPT session found at ${SESSION_PATH}.\n${SETUP_HINT}`);
   }
 
+  // GitHub Actions IPs are datacenter IPs that Cloudflare challenges with
+  // "Just a moment", making the live check a false negative in CI. Skip it
+  // there — a bad session will still surface as test failures.
+  if (process.env.CI) {
+    console.log('\n✓ CI mode — skipping live session check, trusting session file\n');
+    return;
+  }
+
   const valid = await isSessionValid(SESSION_PATH);
   if (!valid) {
     throw new Error(`ChatGPT session expired (${SESSION_PATH}).\n${SETUP_HINT}`);
